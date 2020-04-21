@@ -80,14 +80,22 @@ export class MessageApi {
     return (await response.json()) as T;
   }
 
-  sendMessage(input: { recipientId: string; body: string }): Promise<ServerMessage> {
+  sendMessage(input: {
+    recipientId: string;
+    body: string;
+    clientMessageId: string;
+  }): Promise<ServerMessage> {
     return this.request<ServerMessage>('/api/messages', {
       method: 'POST',
       body: JSON.stringify(input)
     });
   }
 
-  sendGroupMessage(input: { groupId: string; body: string }): Promise<ServerMessage> {
+  sendGroupMessage(input: {
+    groupId: string;
+    body: string;
+    clientMessageId: string;
+  }): Promise<ServerMessage> {
     return this.request<ServerMessage>('/api/messages/group', {
       method: 'POST',
       body: JSON.stringify(input)
