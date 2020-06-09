@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { MessageApi } from '../api/client';
 import { ServerMessage } from '../messages/types';
 import { ApiError } from '../api/client';
-import { PollOutcome, delayAfter, nextFailureCount } from './pollingSchedule';
+import { PollOutcome, delayAfter, nextFailureCount, shouldPoll } from './pollingSchedule';
 
 interface PollingArgs {
   api: MessageApi;
@@ -13,7 +13,8 @@ interface PollingArgs {
 }
 
 /**
- * Runs the long poll for as long as the component is mounted.
+ * Runs the long poll for as long as the component is mounted and the tab is
+ * visible.
  *
  * The loop is a recursive setTimeout rather than a setInterval. An interval
  * fires whether or not the previous poll came back, so a slow server gives
@@ -46,7 +47,7 @@ export function usePolling({
     let failures = 0;
 
     async function loop(): Promise<void> {
-      if (cancelled) {
+      if (cancelled || !shouldPoll(document.visibilityState, authenticated)) {
         return;
       }
 
@@ -85,6 +86,19 @@ export function usePolling({
       timer = setTimeout(loop, delay);
     }
 
+    function onVisibilityChange(): void {
+      if (document.visibilityState === 'visible' && !cancelled) {
+        // Come back immediately rather than waiting out a backoff that was
+        // scheduled before the tab was hidden.
+        if (timer) {
+          clearTimeout(timer);
+        }
+        failures = 0;
+        loop();
+      }
+    }
+
+    document.addEventListener('visibilitychange', onVisibilityChange);
     loop();
 
     return () => {
@@ -95,6 +109,7 @@ export function usePolling({
       if (controller) {
         controller.abort();
       }
+      document.removeEventListener('visibilitychange', onVisibilityChange);
     };
   }, [api, authenticated, onAuthFailure]);
 }
