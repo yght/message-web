@@ -8,8 +8,13 @@ interface Props {
 
 /**
  * One message.
+ *
+ * The delivery state is announced to screen readers as well as shown, because
+ * "did that send?" is the single most common thing a user needs to know and a
+ * grey tick communicates nothing to anybody not looking at it.
  */
 export function MessageBubble({ message, isMine }: Props): JSX.Element {
+
   return (
     <li className={'bubble' + (isMine ? ' bubble--mine' : '')}>
       <p className="bubble__body">{message.body}</p>
@@ -17,7 +22,12 @@ export function MessageBubble({ message, isMine }: Props): JSX.Element {
       <span className="bubble__meta">
         <time dateTime={message.sentAt}>{formatTime(message.sentAt)}</time>
 
-      </span>
+        {isMine && (
+          <span className="bubble__status">
+            {message.status === 'sending' && <span aria-label="Sending">·</span>}
+            {message.status === 'sent' && !message.readAt && <span aria-label="Sent">✓</span>}
+            {message.status === 'sent' && message.readAt && <span aria-label="Read">✓✓</span>}
+          </span>
         )}
       </span>
 
