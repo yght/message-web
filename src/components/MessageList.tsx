@@ -5,9 +5,10 @@ import { MessageBubble } from './MessageBubble';
 interface Props {
   messages: Message[];
   currentUserId: string;
+  onRetry: (clientMessageId: string) => void;
 }
 
-export function MessageList({ messages, currentUserId }: Props): JSX.Element {
+export function MessageList({ messages, currentUserId, onRetry }: Props): JSX.Element {
   const bottom = React.useRef<HTMLDivElement>(null);
 
   // Scroll to the newest message when one arrives. Keyed on length rather
@@ -31,6 +32,7 @@ export function MessageList({ messages, currentUserId }: Props): JSX.Element {
             key={message.id}
             message={message}
             isMine={message.senderId === currentUserId}
+            onRetry={onRetry}
           />
         ))}
       </ul>

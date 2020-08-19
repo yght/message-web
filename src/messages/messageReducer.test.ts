@@ -63,6 +63,29 @@ describe('sending', () => {
     expect(visibleMessages(state)[0].status).toBe('sent');
   });
 
+  it('marks a failed send without losing what the user typed', () => {
+    const state = run([
+      { type: 'SEND_STARTED', message: optimistic('c1', 'important thing', '2020-05-14T10:00:00Z') },
+      { type: 'SEND_FAILED', clientMessageId: 'c1', reason: 'Network unreachable' }
+    ]);
+
+    const message = visibleMessages(state)[0];
+    expect(message.status).toBe('failed');
+    expect(message.body).toBe('important thing');
+    expect(message.failureReason).toBe('Network unreachable');
+  });
+
+  it('clears the failure when the user retries', () => {
+    const state = run([
+      { type: 'SEND_STARTED', message: optimistic('c1', 'hello', '2020-05-14T10:00:00Z') },
+      { type: 'SEND_FAILED', clientMessageId: 'c1', reason: 'Network unreachable' },
+      { type: 'RETRY_SEND', clientMessageId: 'c1' }
+    ]);
+
+    const message = visibleMessages(state)[0];
+    expect(message.status).toBe('sending');
+    expect(message.failureReason).toBeUndefined();
+  });
 });
 
 describe('deduplication', () => {

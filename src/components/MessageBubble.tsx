@@ -4,6 +4,7 @@ import { Message } from '../messages/types';
 interface Props {
   message: Message;
   isMine: boolean;
+  onRetry: (clientMessageId: string) => void;
 }
 
 /**
@@ -13,10 +14,17 @@ interface Props {
  * "did that send?" is the single most common thing a user needs to know and a
  * grey tick communicates nothing to anybody not looking at it.
  */
-export function MessageBubble({ message, isMine }: Props): JSX.Element {
+export function MessageBubble({ message, isMine, onRetry }: Props): JSX.Element {
+  const failed = message.status === 'failed';
 
   return (
-    <li className={'bubble' + (isMine ? ' bubble--mine' : '')}>
+    <li
+      className={
+        'bubble' +
+        (isMine ? ' bubble--mine' : '') +
+        (failed ? ' bubble--failed' : '')
+      }
+    >
       <p className="bubble__body">{message.body}</p>
 
       <span className="bubble__meta">
@@ -31,6 +39,17 @@ export function MessageBubble({ message, isMine }: Props): JSX.Element {
         )}
       </span>
 
+      {failed && (
+        <div className="bubble__failure" role="alert">
+          <span>{message.failureReason || 'Not delivered'}</span>
+          <button
+            type="button"
+            onClick={() => message.clientMessageId && onRetry(message.clientMessageId)}
+          >
+            Retry
+          </button>
+        </div>
+      )}
     </li>
   );
 }

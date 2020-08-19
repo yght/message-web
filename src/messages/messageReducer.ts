@@ -24,6 +24,8 @@ export const initialState: ConversationState = {
 export type MessageEvent =
   | { type: 'SEND_STARTED'; message: Message }
   | { type: 'SEND_SUCCEEDED'; clientMessageId: string; message: ServerMessage }
+  | { type: 'SEND_FAILED'; clientMessageId: string; reason: string }
+  | { type: 'RETRY_SEND'; clientMessageId: string }
   | { type: 'MESSAGES_RECEIVED'; messages: ServerMessage[]; until: string | null }
   | { type: 'MARK_READ'; id: string; readAt: string }
   | { type: 'DELETE'; id: string };
@@ -132,8 +134,36 @@ export function messageReducer(
         ...event.message,
         status: 'sent'
       };
+      delete (confirmed as Partial<Message>).failureReason;
 
       return replace(state, currentId, confirmed);
+    }
+
+    case 'SEND_FAILED': {
+      const currentId = state.byClientId[event.clientMessageId];
+      if (!currentId) {
+        return state;
+      }
+
+      const failed: Message = {
+        ...state.entities[currentId],
+        status: 'failed',
+        failureReason: event.reason
+      };
+
+      return { ...state, entities: { ...state.entities, [currentId]: failed } };
+    }
+
+    case 'RETRY_SEND': {
+      const currentId = state.byClientId[event.clientMessageId];
+      if (!currentId) {
+        return state;
+      }
+
+      const retrying: Message = { ...state.entities[currentId], status: 'sending' };
+      delete retrying.failureReason;
+
+      return { ...state, entities: { ...state.entities, [currentId]: retrying } };
     }
 
     case 'MESSAGES_RECEIVED': {
@@ -147,7 +177,11 @@ export function messageReducer(
           // point of the exercise. Keep 'sending' if the POST has not come
           // back yet, so the tick does not flicker.
           const held = next.entities[existing];
-          const merged: Message = { ...held, ...incoming, status: held.status };
+          const merged: Message = {
+            ...held,
+            ...incoming,
+            status: held.status
+          };
 
           next = existing === incoming.id
             ? { ...next, entities: { ...next.entities, [existing]: merged } }
