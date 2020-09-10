@@ -158,6 +158,22 @@ describe('deduplication', () => {
     expect(state.order).toEqual(['msg_901']);
   });
 
+  it('recovers a failed send if the message actually got through', () => {
+    // The POST timed out but the server had already stored it. The poll
+    // brings it back, and the angry red retry button should go away.
+    const state = run([
+      { type: 'SEND_STARTED', message: optimistic('c1', 'hello', '2020-05-14T10:00:00Z') },
+      { type: 'SEND_FAILED', clientMessageId: 'c1', reason: 'Timed out' },
+      {
+        type: 'MESSAGES_RECEIVED',
+        messages: [fromServer('msg_900', 'hello', '2020-05-14T10:00:00Z', 'c1', ME)],
+        until: '2020-05-14T10:00:01Z'
+      }
+    ]);
+
+    expect(visibleMessages(state)[0].status).toBe('sent');
+    expect(state.order).toHaveLength(1);
+  });
 });
 
 describe('ordering', () => {

@@ -180,7 +180,7 @@ export function messageReducer(
           const merged: Message = {
             ...held,
             ...incoming,
-            status: held.status
+            status: held.status === 'failed' ? 'sent' : held.status
           };
 
           next = existing === incoming.id
