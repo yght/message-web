@@ -209,6 +209,22 @@ describe('ordering', () => {
     expect(bodies(state)).toEqual(['a', 'b']);
   });
 
+  it('keeps an optimistic message in place when the client clock runs fast', () => {
+    // Our clock says 10:05; the server says the message was 10:02.
+    const state = run([
+      { type: 'MESSAGES_RECEIVED', messages: [fromServer('m1', 'theirs', '2020-05-14T10:03:00Z')], until: null },
+      { type: 'SEND_STARTED', message: optimistic('c1', 'mine', '2020-05-14T10:05:00Z') },
+      {
+        type: 'SEND_SUCCEEDED',
+        clientMessageId: 'c1',
+        message: fromServer('msg_900', 'mine', '2020-05-14T10:02:00Z', 'c1', ME)
+      }
+    ]);
+
+    expect(state.order).toHaveLength(2);
+    expect(bodies(state)).toContain('mine');
+    expect(bodies(state)).toContain('theirs');
+  });
 });
 
 describe('the polling cursor', () => {
@@ -231,6 +247,42 @@ describe('the polling cursor', () => {
     ]);
 
     expect(state.since).toBe('2020-05-14T10:01:30Z');
+  });
+});
+
+describe('read receipts and deletion', () => {
+  const withOne = run([
+    { type: 'MESSAGES_RECEIVED', messages: [fromServer('m1', 'hi', '2020-05-14T10:01:00Z')], until: null }
+  ]);
+
+  it('records a read timestamp', () => {
+    const state = messageReducer(withOne, { type: 'MARK_READ', id: 'm1', readAt: '2020-05-14T10:05:00Z' });
+    expect(state.entities['m1'].readAt).toBe('2020-05-14T10:05:00Z');
+  });
+
+  it('does not move the read timestamp once it is set', () => {
+    const once = messageReducer(withOne, { type: 'MARK_READ', id: 'm1', readAt: '2020-05-14T10:05:00Z' });
+    const twice = messageReducer(once, { type: 'MARK_READ', id: 'm1', readAt: '2020-05-14T11:00:00Z' });
+
+    expect(twice).toBe(once);
+  });
+
+  it('ignores a read receipt for a message we do not have', () => {
+    expect(messageReducer(withOne, { type: 'MARK_READ', id: 'nope', readAt: 'x' })).toBe(withOne);
+  });
+
+  it('removes a deleted message from the order and both indexes', () => {
+    const sent = run([
+      { type: 'SEND_STARTED', message: optimistic('c1', 'oops', '2020-05-14T10:00:00Z') }
+    ]);
+    const state = messageReducer(sent, { type: 'DELETE', id: 'tmp_c1' });
+
+    expect(state.order).toEqual([]);
+    expect(state.byClientId['c1']).toBeUndefined();
+  });
+
+  it('ignores a delete for something already gone', () => {
+    expect(messageReducer(withOne, { type: 'DELETE', id: 'nope' })).toBe(withOne);
   });
 });
 
