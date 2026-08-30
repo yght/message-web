@@ -1,75 +1,98 @@
 # message-web
 
 React client for the MessagePlatform API. TypeScript, hooks, HTTP long-polling.
-The backend is the MessagePlatform .NET API.
+Talks to [dotnet-showcase](https://github.com/yght/dotnet-showcase).
 
-## The problem
+*A note on this repository: it's a cleaned-up rebuild of a client I wrote in
+2020. The original points at a live API with real conversations in it, so I
+can't put it up. The reconciliation logic and the polling behaviour are the
+real ones — I rewrote the code against a stub so it could be shared. Ask me to
+screen-share the original if you want to see it running.*
 
-Real-time messaging without WebSockets. The .NET API of that era used HTTP
-long-polling — the server holds a request open for up to thirty seconds and
-returns the moment something arrives. That works well, and it creates one
-genuinely hard problem.
+## Why this is harder than it looks
 
-**Your own message comes back to you.** You send a message, you show it
-immediately so the app feels instant, the POST returns the stored version, and
-the long poll *also* delivers it, because the poll does not know which client
-sent what. Three copies of one message, arriving in any order.
+Messaging without WebSockets. The .NET API of that era long-polls: the server
+holds your request open for thirty seconds and answers the moment something
+arrives. Works fine. Creates one genuinely nasty problem.
 
-The ordering is not theoretical:
+Your own message comes back to you.
 
-| Order | What the user sees without care |
-|---|---|
-| POST returns, then poll delivers | message appears twice |
-| Poll delivers, then POST returns | message appears twice, second copy replaces the first |
-| POST times out, poll delivers | red "failed" message next to a successfully delivered copy |
+You send something. You render it immediately, because waiting on a round trip
+feels broken. The POST returns the stored copy. And then the long poll hands
+you the same message again, because the poll has no idea which client sent
+what. Three copies of one message, and no guarantee about the order they show
+up in.
 
-So identity cannot hang off the server's id — at the moment we first render a
-message we do not have one. Every message carries a `clientMessageId` that we
-generate before sending. The API stores it and echoes it on every copy of that
-message we will ever see. That is the whole design.
+I hit all three orderings in production:
 
-## What's in here
+* POST comes back, then the poll delivers → message shown twice
+* Poll delivers, then the POST comes back → shown twice, second copy stomps the first
+* POST times out but the server stored it anyway → a red "failed" message sitting next to a delivered copy of itself
 
-| Path | What it is |
-|---|---|
-| `messages/messageReducer.ts` | Reconciliation. The file worth reading. |
-| `polling/pollingSchedule.ts` | When to poll again — pure, so backoff is testable without waiting. |
-| `polling/usePolling.ts` | The loop itself: aborts, visibility, no overlapping requests. |
-| `messages/useConversation.ts` | Ties the reducer to the API. |
-| `api/client.ts` | The MessagePlatform endpoints. |
-| `components/` | List, bubble, composer. No logic in them. |
+The fix has to start earlier than it feels like it should. You can't key off
+the server's id, because at the moment you first put the message on screen you
+don't have one. So the client makes an id before sending, the API stores it
+and echoes it back on every copy of that message you'll ever see. Everything
+else follows from that.
 
-## Decisions worth arguing about
+## Getting around the code
 
-1. **[Client-generated message ids](docs/adr/0001-client-message-ids.md)** —
-   why the client and not the server owns message identity at send time.
-2. **[Recursive setTimeout, not setInterval](docs/adr/0002-polling-loop.md)** —
-   and why a backgrounded tab stops polling entirely.
-3. **[Optimistic sends stay visible on failure](docs/adr/0003-failed-sends.md)** —
-   a failed message is not removed, because the user's words are theirs.
+`messages/messageReducer.ts` is the file to read. It holds the entity map, the
+display order, and a `byClientId` index, and it's where the three-way
+reconciliation happens. Everything in it is a pure function, so all of the
+awkward orderings above are unit tests rather than things you have to
+reproduce by hand.
+
+`polling/pollingSchedule.ts` decides when to poll again and nothing else — no
+timers, no fetch. That separation is why the backoff tests finish in
+milliseconds. `polling/usePolling.ts` is the loop that does the waiting,
+aborting and visibility handling.
+
+`api/client.ts` covers the endpoints. `messages/useConversation.ts` ties the
+reducer to the API. The components under `components/` hold no logic worth
+testing on its own — they render what they're given.
+
+## Decisions I wrote down at the time
+
+* [Client-generated message ids](docs/adr/0001-client-message-ids.md) — why identity starts on the client
+* [Recursive setTimeout over setInterval](docs/adr/0002-polling-loop.md) — and why a hidden tab stops entirely
+* [Failed sends stay on screen](docs/adr/0003-failed-sends.md) — deleting what someone typed is data loss
 
 ## Running it
 
 ```bash
 npm install
-npm start       # http://localhost:3000
-npm test        # 46 tests
+npm test
 ```
 
-Point the API base URL at a running
-[MessagePlatform](https://github.com/yght/dotnet-showcase).
+46 tests. The reducer, the polling schedule, and the components through
+Testing Library against React 17. The reconciliation ones are the interesting
+part, including the race where the poll wins.
 
-## What I'd do differently now
+What isn't here: bundler config, dev server, routing, sign-in screens. The
+original was Create React App with the usual pile around it. None of that is
+worth reading and it's where the environment-specific values lived. No
+credentials in this repo, and none of the endpoints are real.
 
-- **`insertionIndex` is a linear scan from the end.** Fine for a conversation
-  page of fifty and wrong for the ten-thousand-message history the search
-  results can produce. It wants a binary search, or the list wants windowing.
-- **The reducer is doing reconciliation and ordering.** Two concerns that
-  change for different reasons; splitting them would make both easier to
-  follow.
-- **Long-polling was the constraint, not the choice.** With SignalR available
-  the whole `polling/` directory becomes a subscription and the reconciliation
-  problem gets smaller — though it does not disappear, because the optimistic
-  send is still ahead of the server.
-- **`friendly()` maps HTTP statuses to English inside the hook.** That belongs
-  at the API boundary, and the strings belong somewhere translatable.
+## Rough edges I'd fix
+
+`insertionIndex` scans backwards from the end of the list. Fine for a page of
+fifty messages, wrong for the ten thousand a search can return — wants a
+binary search, or the list wants windowing.
+
+The reducer does reconciliation *and* ordering. Two jobs that change for
+different reasons and would be easier to follow apart.
+
+`friendly()` maps HTTP statuses to English inside the hook. That belongs at
+the API boundary, and the strings belong somewhere they can be translated.
+
+Long-polling was the constraint, not a preference. With SignalR the whole
+`polling/` directory collapses into a subscription — though the reconciliation
+doesn't go away, because an optimistic send is still ahead of the server.
+
+## About the rebuild
+
+Written the way I'd have written it in 2020: function components and hooks
+throughout, no `React.FC`, `AbortController` rather than a cancellation
+library, nothing from React 18. The test runner is current — a repo you can't
+clone and run isn't much use to anyone reading it.
