@@ -1,7 +1,7 @@
 # message-web
 
 React client for the MessagePlatform API. TypeScript, hooks, HTTP long-polling.
-Talks to [dotnet-showcase](https://github.com/yght/dotnet-showcase).
+Related API sample: [dotnet-showcase](https://github.com/yght/dotnet-showcase).
 
 *A note on this repository: it's a cleaned-up rebuild of a client I wrote in
 2020. The original points at a live API with real conversations in it, so I
@@ -9,11 +9,27 @@ can't put it up. The reconciliation logic and the polling behaviour are the
 real ones — I rewrote the code against a stub so it could be shared. Ask me to
 screen-share the original if you want to see it running.*
 
+## What I want to demonstrate
+
+I want to show how I design frontend state around asynchronous messaging and the experience of the person sending a message.
+
+- **React and TypeScript:** hooks, an API boundary and a reducer that can be reviewed independently.
+- **Asynchronous behaviour:** reconciliation of optimistic messages, POST responses and polled messages using client-generated IDs.
+- **Customer experience:** immediate feedback, visible failures and retry behaviour that preserves what the user wrote.
+- **Testing:** explicit event sequences and polling schedules.
+
+**Start here:** [message reducer](src/messages/messageReducer.ts), [reducer tests](src/messages/messageReducer.test.ts), and [polling loop](src/polling/usePolling.ts).
+
+**Scope:** a client source and test sample with no bundled browser demo. The related public .NET API is a different snapshot: request fields, response shapes and client-message IDs need alignment before the two can run together. The long-polling discussion describes the intended client contract; the public API currently returns immediately.
+
+**Known edge case:** a poll delivery followed by a POST failure can mark a delivered message as failed. Server-confirmed delivery should take precedence over that later failure.
+
 ## Why this is harder than it looks
 
-Messaging without WebSockets. The .NET API of that era long-polls: the server
-holds your request open for thirty seconds and answers the moment something
-arrives. Works fine. Creates one genuinely nasty problem.
+The client is designed around a long-polling contract: a server holds a request
+open until a message arrives or the timeout expires. The public .NET snapshot
+needs changes to provide that contract. This design creates an important
+client-state problem.
 
 Your own message comes back to you.
 
