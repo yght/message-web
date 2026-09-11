@@ -4,7 +4,9 @@
   "private": true,
   "description": "React client for the MessagePlatform API",
   "scripts": {
-    "test": "jest"
+    "test": "jest",
+    "typecheck": "tsc --noEmit",
+    "test:ci": "jest --ci --runInBand"
   },
   "dependencies": {
     "react": "17.0.2",

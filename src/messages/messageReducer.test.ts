@@ -89,6 +89,26 @@ describe('sending', () => {
 });
 
 describe('deduplication', () => {
+  it.each(['SEND_FAILED', 'RETRY_SEND'] as const)(
+    'does not downgrade poll-confirmed delivery after %s', type => {
+      const confirmed = run([
+        { type: 'SEND_STARTED', message: optimistic('c1', 'hello', '2020-05-14T10:00:00Z') },
+        {
+          type: 'MESSAGES_RECEIVED',
+          messages: [fromServer('msg_900', 'hello', '2020-05-14T10:00:00Z', 'c1', ME)],
+          until: '2020-05-14T10:00:01Z'
+        }
+      ]);
+      const state = messageReducer(confirmed, type === 'SEND_FAILED'
+        ? { type, clientMessageId: 'c1', reason: 'Timed out' }
+        : { type, clientMessageId: 'c1' });
+      expect(state).toBe(confirmed);
+      expect(state.order).toEqual(['msg_900']);
+      expect(state.entities.msg_900.status).toBe('sent');
+      expect(state.entities.msg_900.failureReason).toBeUndefined();
+    }
+  );
+
   it('does not show our own message twice when the poll returns it', () => {
     const state = run([
       { type: 'SEND_STARTED', message: optimistic('c1', 'hello', '2020-05-14T10:00:00Z') },
@@ -131,7 +151,7 @@ describe('deduplication', () => {
     expect(visibleMessages(state)[0].status).toBe('sent');
   });
 
-  it('keeps the sending tick until the POST confirms, even after the poll arrives', () => {
+  it('confirms delivery immediately when the poll arrives', () => {
     const state = run([
       { type: 'SEND_STARTED', message: optimistic('c1', 'hello', '2020-05-14T10:00:00Z') },
       {
@@ -141,10 +161,9 @@ describe('deduplication', () => {
       }
     ]);
 
-    // The message is now under its real id, but we have not heard back from
-    // our own request, so it is still in flight as far as we know.
+    // The server copy is evidence of delivery, even before the POST resolves.
     expect(state.order).toEqual(['msg_900']);
-    expect(visibleMessages(state)[0].status).toBe('sending');
+    expect(visibleMessages(state)[0].status).toBe('sent');
   });
 
   it('ignores a redelivery of the same message, since the poll is at-least-once', () => {
@@ -172,6 +191,7 @@ describe('deduplication', () => {
     ]);
 
     expect(visibleMessages(state)[0].status).toBe('sent');
+    expect(visibleMessages(state)[0].failureReason).toBeUndefined();
     expect(state.order).toHaveLength(1);
   });
 });

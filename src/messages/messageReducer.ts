@@ -141,7 +141,7 @@ export function messageReducer(
 
     case 'SEND_FAILED': {
       const currentId = state.byClientId[event.clientMessageId];
-      if (!currentId) {
+      if (!currentId || state.entities[currentId].status === 'sent') {
         return state;
       }
 
@@ -156,7 +156,7 @@ export function messageReducer(
 
     case 'RETRY_SEND': {
       const currentId = state.byClientId[event.clientMessageId];
-      if (!currentId) {
+      if (!currentId || state.entities[currentId].status === 'sent') {
         return state;
       }
 
@@ -173,15 +173,16 @@ export function messageReducer(
         const existing = existingIdFor(next, incoming);
 
         if (existing) {
-          // Already have it. Merge rather than append - this is the whole
-          // point of the exercise. Keep 'sending' if the POST has not come
-          // back yet, so the tick does not flicker.
+          // A server copy confirms delivery even if the POST is still pending.
+          // A later timeout must not turn this message back into a failure.
           const held = next.entities[existing];
           const merged: Message = {
             ...held,
             ...incoming,
-            status: held.status === 'failed' ? 'sent' : held.status
+            status: 'sent'
           };
+
+          delete merged.failureReason;
 
           next = existing === incoming.id
             ? { ...next, entities: { ...next.entities, [existing]: merged } }

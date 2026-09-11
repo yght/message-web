@@ -22,7 +22,13 @@ I want to show how I design frontend state around asynchronous messaging and the
 
 **Scope:** a client source and test sample with no bundled browser demo. The related public .NET API is a different snapshot: request fields, response shapes and client-message IDs need alignment before the two can run together. The long-polling discussion describes the intended client contract; the public API currently returns immediately.
 
-**Known edge case:** a poll delivery followed by a POST failure can mark a delivered message as failed. Server-confirmed delivery should take precedence over that later failure.
+## Recent improvements — Yousof
+
+- A message received from the server is now marked delivered immediately, even while the POST is pending.
+- Late timeouts and stale retry actions cannot downgrade confirmed delivery; confirmation clears the previous failure reason.
+- Added regression tests for these event orderings, a TypeScript check command and [GitHub Actions checks](.github/workflows/ci.yml) for Node 22 and 24.
+
+Local validation: all 48 tests and TypeScript checking passed. The workflow runs the same checks on both configured Node versions.
 
 ## Why this is harder than it looks
 
@@ -77,11 +83,12 @@ testing on its own — they render what they're given.
 ## Running it
 
 ```bash
-npm install
-npm test
+npm ci
+npm run typecheck
+npm run test:ci
 ```
 
-46 tests. The reducer, the polling schedule, and the components through
+48 tests. The reducer, the polling schedule, and the components through
 Testing Library against React 17. The reconciliation ones are the interesting
 part, including the race where the poll wins.
 
