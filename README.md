@@ -119,3 +119,9 @@ Written the way I'd have written it in 2020: function components and hooks
 throughout, no `React.FC`, `AbortController` rather than a cancellation
 library, nothing from React 18. The test runner is current — a repo you can't
 clone and run isn't much use to anyone reading it.
+
+## Engineering practices
+
+[Contribution and verification guide](CONTRIBUTING.md) · [Review template](.github/pull_request_template.md)
+
+The backend payloads still need alignment before an end-to-end browser demo is possible.
