@@ -132,6 +132,7 @@ export function messageReducer(
       const confirmed: Message = {
         ...state.entities[currentId],
         ...event.message,
+        readAt: state.entities[currentId].readAt ?? event.message.readAt,
         status: 'sent'
       };
       delete (confirmed as Partial<Message>).failureReason;
@@ -179,6 +180,7 @@ export function messageReducer(
           const merged: Message = {
             ...held,
             ...incoming,
+            readAt: held.readAt ?? incoming.readAt,
             status: 'sent'
           };
 

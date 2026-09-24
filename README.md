@@ -125,3 +125,15 @@ clone and run isn't much use to anyone reading it.
 [Contribution and verification guide](CONTRIBUTING.md) · [Review template](.github/pull_request_template.md)
 
 The backend payloads still need alignment before an end-to-end browser demo is possible.
+
+## Read receipt reconciliation
+
+Once the client observes a read receipt, delayed POST responses and poll batches
+cannot clear it. Confirmation also preserves the receipt when replacing a
+temporary message ID. The first observed non-null receipt is retained; this is
+a monotonic read/unread policy, not a guarantee of the earliest read timestamp.
+There is no mark-unread operation in this sample.
+
+The reducer regression tests exercise stale responses from both delivery paths,
+temporary-ID replacement and receipt arrival for an unread message.
+Run `npm test -- --runInBand` and `npm run typecheck`.

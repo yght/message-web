@@ -318,3 +318,41 @@ describe('immutability', () => {
     expect(JSON.stringify(before)).toBe(snapshot);
   });
 });
+
+describe('read receipt reconciliation', () => {
+  const sentAt = '2020-05-14T10:00:00Z';
+  const readAt = '2020-05-14T10:01:00Z';
+  const server = fromServer('msg_read', 'hello', sentAt, 'read-client', ME);
+
+  it.each(['poll', 'post'])('preserves a receipt across a stale %s response', route => {
+    const state = run([
+      { type: 'SEND_STARTED', message: optimistic('read-client', 'hello', sentAt) },
+      { type: 'MESSAGES_RECEIVED', messages: [server], until: null },
+      { type: 'MARK_READ', id: server.id, readAt }
+    ]);
+    const next = messageReducer(state, route === 'poll'
+      ? { type: 'MESSAGES_RECEIVED', messages: [server], until: null }
+      : { type: 'SEND_SUCCEEDED', clientMessageId: 'read-client', message: server });
+    expect(next.entities[server.id].readAt).toBe(readAt);
+    expect(next.order).toEqual([server.id]);
+    expect(state.entities[server.id].readAt).toBe(readAt);
+  });
+
+  it('preserves a receipt when confirmation replaces the temporary ID', () => {
+    const state = run([
+      { type: 'SEND_STARTED', message: optimistic('read-client', 'hello', sentAt) },
+      { type: 'MARK_READ', id: 'tmp_read-client', readAt },
+      { type: 'SEND_SUCCEEDED', clientMessageId: 'read-client', message: server }
+    ]);
+    expect(state.entities[server.id].readAt).toBe(readAt);
+    expect(state.entities['tmp_read-client']).toBeUndefined();
+  });
+
+  it('accepts an incoming receipt for an unread message', () => {
+    const state = run([
+      { type: 'MESSAGES_RECEIVED', messages: [server], until: null },
+      { type: 'MESSAGES_RECEIVED', messages: [{ ...server, readAt }], until: null }
+    ]);
+    expect(state.entities[server.id].readAt).toBe(readAt);
+  });
+});
