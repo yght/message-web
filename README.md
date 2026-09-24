@@ -137,3 +137,16 @@ There is no mark-unread operation in this sample.
 The reducer regression tests exercise stale responses from both delivery paths,
 temporary-ID replacement and receipt arrival for an unread message.
 Run `npm test -- --runInBand` and `npm run typecheck`.
+
+## Poll lifecycle safety
+
+The polling hook admits only one in-flight request per effect, including when
+visibility events arrive before the current request completes. A 401 latches
+that effect into a stopped state; visibility changes cannot restart it.
+Authentication recovery requires the effect to restart with updated dependencies.
+Unmount aborts the active request and ignores a late result.
+
+Hook tests use deferred promises, fake timers and real React mounting to cover
+overlap prevention, authentication failure and cleanup. This does not add a
+network timeout: a transport that never settles still needs its own deadline.
+Run `npm test -- --runInBand` and `npm run typecheck`.

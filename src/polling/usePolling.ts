@@ -42,15 +42,18 @@ export function usePolling({
     }
 
     let cancelled = false;
+    let inFlight = false;
+    let authStopped = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
     let controller: AbortController | null = null;
     let failures = 0;
 
     async function loop(): Promise<void> {
-      if (cancelled || !shouldPoll(document.visibilityState, authenticated)) {
+      if (cancelled || inFlight || authStopped || !shouldPoll(document.visibilityState, authenticated)) {
         return;
       }
 
+      inFlight = true;
       controller = new AbortController();
       let outcome: PollOutcome;
 
@@ -68,12 +71,16 @@ export function usePolling({
           outcome = { kind: 'aborted' };
         } else if (err instanceof ApiError) {
           outcome = { kind: 'error', status: err.status };
-          if (err.status === 401 && onAuthFailure) {
-            onAuthFailure();
+          if (err.status === 401) {
+            authStopped = true;
+            onAuthFailure?.();
           }
         } else {
           outcome = { kind: 'error', status: 0 };
         }
+      } finally {
+        inFlight = false;
+        controller = null;
       }
 
       failures = nextFailureCount(failures, outcome);
